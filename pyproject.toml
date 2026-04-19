@@ -1,0 +1,17 @@
+[tool.poetry]
+name = "uncle-joes-api-example"
+version = "0.1.0"
+description = "Uncle Joe's Coffee Company — FastAPI login example"
+authors = []
+
+[tool.poetry.dependencies]
+python = "^3.11"
+fastapi = "*"
+uvicorn = {version = "*", extras = ["standard"]}
+bcrypt = "*"
+google-cloud-bigquery = "*"
+pydantic = "*"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
