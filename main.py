@@ -412,7 +412,27 @@ def delete_member(member_id: str):
     return {"message": "Member deleted"}
 
 
-# --- MENU ITEMS (POST, PUT, DELETE) ---
+# --- MENU ITEMS (GET, POST, PUT, DELETE) ---
+
+@app.get("/menu/{item_id}")
+def get_menu_item(item_id: str):
+    """
+    Fetches a single menu item by its ID.
+    """
+    query = f"""
+    SELECT * FROM `{GCP_PROJECT}.{DATASET}.menu_items` 
+    WHERE id = @id
+    """
+
+    params = [bigquery.ScalarQueryParameter("id", "STRING", item_id)]
+    
+    results = run_query(query, params)
+    
+    if not results:
+        raise HTTPException(status_code=404, detail="Menu item not found")
+    
+    return results[0]
+
 
 @app.post("/menu")
 def create_menu_item(item: MenuItem):
