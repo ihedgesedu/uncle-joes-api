@@ -215,7 +215,13 @@ def search_locations(
 
     query = f"""
         SELECT
-            id, city, state, zip_code, address_one, wifi, drive_thru
+            id,
+            city,
+            state,
+            zip_code,
+            address_one,
+            COALESCE(CAST(wifi AS BOOL), FALSE) AS wifi,
+            COALESCE(CAST(drive_thru AS BOOL), FALSE) AS drive_thru
             {select_distance}
         FROM `{GCP_PROJECT}.{DATASET}.locations`
         {where_sql}
