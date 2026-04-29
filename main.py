@@ -178,8 +178,8 @@ def search_locations(
 
     params = []
     where_clauses = []
-    latitude_expr = "SAFE_CAST(latitude AS FLOAT64)"
-    longitude_expr = "SAFE_CAST(longitude AS FLOAT64)"
+    latitude_expr = "SAFE_CAST(location_map_lat AS FLOAT64)"
+    longitude_expr = "SAFE_CAST(location_map_lng AS FLOAT64)"
     distance_expr = f"""
         ST_DISTANCE(
             ST_GEOGPOINT({longitude_expr}, {latitude_expr}),
@@ -228,7 +228,7 @@ def search_locations(
     except BadRequest as e:
         # Give the frontend a meaningful error instead of an opaque 500.
         message = str(e)
-        if "Unrecognized name: latitude" in message or "Unrecognized name: longitude" in message:
+        if "Unrecognized name: location_map_lat" in message or "Unrecognized name: location_map_lng" in message:
             raise HTTPException(
                 status_code=400,
                 detail=(
