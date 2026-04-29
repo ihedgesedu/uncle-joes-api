@@ -17,6 +17,7 @@ Then POST to http://127.0.0.1:8000/login
 import bcrypt
 from fastapi import FastAPI, HTTPException, Query
 from google.cloud import bigquery
+from google.api_core.exceptions import BadRequest
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional
@@ -177,9 +178,11 @@ def search_locations(
 
     params = []
     where_clauses = []
-    distance_expr = """
+    latitude_expr = "SAFE_CAST(latitude AS FLOAT64)"
+    longitude_expr = "SAFE_CAST(longitude AS FLOAT64)"
+    distance_expr = f"""
         ST_DISTANCE(
-            ST_GEOGPOINT(CAST(longitude AS FLOAT64), CAST(latitude AS FLOAT64)),
+            ST_GEOGPOINT({longitude_expr}, {latitude_expr}),
             ST_GEOGPOINT(@lng, @lat)
         ) / 1609.344
     """
@@ -197,8 +200,8 @@ def search_locations(
 
     if has_lat_lng:
         select_distance = f", {distance_expr} AS distance_miles"
-        where_clauses.append("latitude IS NOT NULL")
-        where_clauses.append("longitude IS NOT NULL")
+        where_clauses.append(f"{latitude_expr} IS NOT NULL")
+        where_clauses.append(f"{longitude_expr} IS NOT NULL")
         params.append(bigquery.ScalarQueryParameter("lat", "FLOAT64", lat))
         params.append(bigquery.ScalarQueryParameter("lng", "FLOAT64", lng))
 
@@ -220,7 +223,20 @@ def search_locations(
         LIMIT {limit}
     """
 
-    return run_query(query, params)
+    try:
+        return run_query(query, params)
+    except BadRequest as e:
+        # Give the frontend a meaningful error instead of an opaque 500.
+        message = str(e)
+        if "Unrecognized name: latitude" in message or "Unrecognized name: longitude" in message:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Location proximity search requires latitude/longitude columns in "
+                    f"`{GCP_PROJECT}.{DATASET}.locations`."
+                ),
+            )
+        raise HTTPException(status_code=400, detail="Invalid location search query parameters.")
 
 @app.get("/locations/{location_id}")
 def get_location(location_id: str):
