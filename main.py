@@ -21,6 +21,7 @@ from google.api_core.exceptions import BadRequest
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional
+import traceback
 
 app = FastAPI(title="Uncle Joe's Coffee API")
 
@@ -50,13 +51,13 @@ class Location(BaseModel):
     zip_code: str
 
 class LocationSearchResult(BaseModel):
-    id: str
-    city: str
-    state: str
-    zip_code: str
-    address_one: str
-    wifi: bool
-    drive_thru: bool
+    id: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = None
+    zip_code: Optional[str] = None
+    address_one: Optional[str] = None
+    wifi: Optional[bool] = None
+    drive_thru: Optional[bool] = None
     distance_miles: Optional[float] = None
 
 class MemberCreate(BaseModel):
@@ -215,11 +216,11 @@ def search_locations(
 
     query = f"""
         SELECT
-            id,
-            city,
-            state,
-            zip_code,
-            address_one,
+            CAST(id AS STRING) AS id,
+            CAST(city AS STRING) AS city,
+            CAST(state AS STRING) AS state,
+            CAST(zip_code AS STRING) AS zip_code,
+            CAST(address_one AS STRING) AS address_one,
             COALESCE(CAST(wifi AS BOOL), FALSE) AS wifi,
             COALESCE(CAST(drive_thru AS BOOL), FALSE) AS drive_thru
             {select_distance}
@@ -242,7 +243,10 @@ def search_locations(
                     f"`{GCP_PROJECT}.{DATASET}.locations`."
                 ),
             )
-        raise HTTPException(status_code=400, detail="Invalid location search query parameters.")
+        raise HTTPException(status_code=400, detail=f"Invalid location search query parameters: {message}")
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Location search failed: {str(e)}")
 
 @app.get("/locations/{location_id}")
 def get_location(location_id: str):
