@@ -261,7 +261,7 @@ def get_items_for_order(order_id: str):
     query = f"""
     SELECT * 
     FROM `{GCP_PROJECT}.{DATASET}.order_items` 
-    WHERE order_id = @order_i
+    WHERE order_id = @order_id
     """
     
     params = [bigquery.ScalarQueryParameter("order_id", "STRING", order_id)]
