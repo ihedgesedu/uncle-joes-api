@@ -15,7 +15,7 @@ Then POST to http://127.0.0.1:8000/login
 """
 
 import bcrypt
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from google.cloud import bigquery
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
@@ -47,6 +47,16 @@ class Location(BaseModel):
     drive_thru: bool
     address_one: str
     zip_code: str
+
+class LocationSearchResult(BaseModel):
+    id: str
+    city: str
+    state: str
+    zip_code: str
+    address_one: str
+    wifi: bool
+    drive_thru: bool
+    distance_miles: Optional[float] = None
 
 class MemberCreate(BaseModel):
     id: str
@@ -146,6 +156,71 @@ def get_locations():
     """
     
     return run_query(query)
+
+@app.get("/locations/search", response_model=List[LocationSearchResult])
+def search_locations(
+    lat: Optional[float] = Query(default=None),
+    lng: Optional[float] = Query(default=None),
+    radiusMiles: Optional[float] = Query(default=None, gt=0),
+    limit: int = Query(default=50, ge=1, le=200),
+    wifi: Optional[bool] = Query(default=None),
+    drive_thru: Optional[bool] = Query(default=None),
+):
+    has_lat_lng = lat is not None and lng is not None
+    has_partial_lat_lng = (lat is None) != (lng is None)
+
+    if has_partial_lat_lng:
+        raise HTTPException(status_code=400, detail="Both lat and lng are required together.")
+
+    if radiusMiles is not None and not has_lat_lng:
+        raise HTTPException(status_code=400, detail="lat and lng are required when radiusMiles is provided.")
+
+    params = []
+    where_clauses = []
+    distance_expr = """
+        ST_DISTANCE(
+            ST_GEOGPOINT(CAST(longitude AS FLOAT64), CAST(latitude AS FLOAT64)),
+            ST_GEOGPOINT(@lng, @lat)
+        ) / 1609.344
+    """
+
+    if wifi is not None:
+        where_clauses.append("wifi = @wifi")
+        params.append(bigquery.ScalarQueryParameter("wifi", "BOOL", wifi))
+
+    if drive_thru is not None:
+        where_clauses.append("drive_thru = @drive_thru")
+        params.append(bigquery.ScalarQueryParameter("drive_thru", "BOOL", drive_thru))
+
+    select_distance = ""
+    order_by = "ORDER BY city, state"
+
+    if has_lat_lng:
+        select_distance = f", {distance_expr} AS distance_miles"
+        where_clauses.append("latitude IS NOT NULL")
+        where_clauses.append("longitude IS NOT NULL")
+        params.append(bigquery.ScalarQueryParameter("lat", "FLOAT64", lat))
+        params.append(bigquery.ScalarQueryParameter("lng", "FLOAT64", lng))
+
+        if radiusMiles is not None:
+            where_clauses.append(f"{distance_expr} <= @radius_miles")
+            params.append(bigquery.ScalarQueryParameter("radius_miles", "FLOAT64", radiusMiles))
+
+        order_by = "ORDER BY distance_miles ASC"
+
+    where_sql = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
+
+    query = f"""
+        SELECT
+            id, city, state, zip_code, address_one, wifi, drive_thru
+            {select_distance}
+        FROM `{GCP_PROJECT}.{DATASET}.locations`
+        {where_sql}
+        {order_by}
+        LIMIT {limit}
+    """
+
+    return run_query(query, params)
 
 @app.get("/locations/{location_id}")
 def get_location(location_id: str):
